@@ -54,7 +54,7 @@ module butterfly (
         end
     end
     
-    // Delay lines for 'a' to match latency of 'bw' (2 cycles difference since inputs were registered)
+    // Delay lines for 'a' to match latency of 'bw'
     reg signed [15:0] a_re_d1, a_im_d1;
     reg signed [15:0] a_re_d2, a_im_d2;
     always @(posedge clk) begin
@@ -66,29 +66,35 @@ module butterfly (
             a_re_d2 <= a_re_d1; a_im_d2 <= a_im_d1;
         end
     end
-    
-    // Saturation logic macro for Q15 shifted outputs
-    function signed [15:0] saturate_q15;
-        input signed [31:0] val;
-        begin
-            if (val[31:15] > 32'h0000_0000) begin
-                saturate_q15 = 16'h7FFF; // Pos limit
-            end else if (val[31:15] < 32'hFFFF_FFFF) begin
-                saturate_q15 = 16'h8000; // Neg limit
-            end else begin
-                saturate_q15 = val[30:15];
-            end
-        end
-    endfunction
 
-    wire signed [15:0] bw_re = saturate_q15(bw_re_full);
-    wire signed [15:0] bw_im = saturate_q15(bw_im_full);
+    // Stage 3: Pipelined Saturation (Breaks massive LUT combinational paths)
+    reg signed [15:0] bw_re_sat, bw_im_sat;
+    reg signed [15:0] a_re_d3, a_im_d3;
     
-    // Add logic explicitly pushed to DSP Slices manually
-    (* use_dsp = "yes" *) wire signed [15:0] sum_re = a_re_d2 + bw_re;
-    (* use_dsp = "yes" *) wire signed [15:0] sum_im = a_im_d2 + bw_im;
-    (* use_dsp = "yes" *) wire signed [15:0] diff_re = a_re_d2 - bw_re;
-    (* use_dsp = "yes" *) wire signed [15:0] diff_im = a_im_d2 - bw_im;
+    always @(posedge clk) begin
+        if (rst) begin
+            bw_re_sat <= 0; bw_im_sat <= 0;
+            a_re_d3 <= 0; a_im_d3 <= 0;
+        end else begin
+            // Compact pipelined inline saturation checking
+            if (bw_re_full[31:15] > 32'h0000_0000) bw_re_sat <= 16'h7FFF;
+            else if (bw_re_full[31:15] < 32'hFFFF_FFFF) bw_re_sat <= 16'h8000;
+            else bw_re_sat <= bw_re_full[30:15];
+            
+            if (bw_im_full[31:15] > 32'h0000_0000) bw_im_sat <= 16'h7FFF;
+            else if (bw_im_full[31:15] < 32'hFFFF_FFFF) bw_im_sat <= 16'h8000;
+            else bw_im_sat <= bw_im_full[30:15];
+            
+            a_re_d3 <= a_re_d2;
+            a_im_d3 <= a_im_d2;
+        end
+    end
+    
+    // Stage 4: Add logic explicitly pushed to DSP Slices manually
+    (* use_dsp = "yes" *) wire signed [15:0] sum_re = a_re_d3 + bw_re_sat;
+    (* use_dsp = "yes" *) wire signed [15:0] sum_im = a_im_d3 + bw_im_sat;
+    (* use_dsp = "yes" *) wire signed [15:0] diff_re = a_re_d3 - bw_re_sat;
+    (* use_dsp = "yes" *) wire signed [15:0] diff_im = a_im_d3 - bw_im_sat;
 
     // Registers lock the result for maximum pipelining and DSP slice utilization
     always @(posedge clk) begin

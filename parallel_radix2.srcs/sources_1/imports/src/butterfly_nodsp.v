@@ -64,27 +64,34 @@ module butterfly_nodsp (
         end
     end
     
-    function signed [15:0] saturate_q15;
-        input signed [31:0] val;
-        begin
-            if (val[31:15] > 32'h0000_0000) begin
-                saturate_q15 = 16'h7FFF; 
-            end else if (val[31:15] < 32'hFFFF_FFFF) begin
-                saturate_q15 = 16'h8000; 
-            end else begin
-                saturate_q15 = val[30:15];
-            end
-        end
-    endfunction
-
-    wire signed [15:0] bw_re = saturate_q15(bw_re_full);
-    wire signed [15:0] bw_im = saturate_q15(bw_im_full);
+    // Stage 3: Pipelined Saturation (Breaks massive LUT combinational paths)
+    reg signed [15:0] bw_re_sat, bw_im_sat;
+    reg signed [15:0] a_re_d3, a_im_d3;
     
-    // DELIBERATELY no DSP constraint here to drop DSP allocation
-    wire signed [15:0] sum_re = a_re_d2 + bw_re;
-    wire signed [15:0] sum_im = a_im_d2 + bw_im;
-    wire signed [15:0] diff_re = a_re_d2 - bw_re;
-    wire signed [15:0] diff_im = a_im_d2 - bw_im;
+    always @(posedge clk) begin
+        if (rst) begin
+            bw_re_sat <= 0; bw_im_sat <= 0;
+            a_re_d3 <= 0; a_im_d3 <= 0;
+        end else begin
+            // Compact pipelined inline saturation checking
+            if (bw_re_full[31:15] > 32'h0000_0000) bw_re_sat <= 16'h7FFF;
+            else if (bw_re_full[31:15] < 32'hFFFF_FFFF) bw_re_sat <= 16'h8000;
+            else bw_re_sat <= bw_re_full[30:15];
+            
+            if (bw_im_full[31:15] > 32'h0000_0000) bw_im_sat <= 16'h7FFF;
+            else if (bw_im_full[31:15] < 32'hFFFF_FFFF) bw_im_sat <= 16'h8000;
+            else bw_im_sat <= bw_im_full[30:15];
+            
+            a_re_d3 <= a_re_d2;
+            a_im_d3 <= a_im_d2;
+        end
+    end
+    
+    // Stage 4: DELIBERATELY no DSP constraint here to drop DSP allocation
+    wire signed [15:0] sum_re = a_re_d3 + bw_re_sat;
+    wire signed [15:0] sum_im = a_im_d3 + bw_im_sat;
+    wire signed [15:0] diff_re = a_re_d3 - bw_re_sat;
+    wire signed [15:0] diff_im = a_im_d3 - bw_im_sat;
 
     always @(posedge clk) begin
         if (rst) begin

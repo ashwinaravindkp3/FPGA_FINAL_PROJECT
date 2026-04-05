@@ -158,18 +158,18 @@ module fft_16_parallel_radix2 (
         end
     endgenerate
 
-    // Valid Shift Register to track array latency (4 stages * 6 cycles/stage = 24 cycles)
-    reg [24:0] valid_sr;
+    // Valid Shift Register to track array latency (4 stages * 5 cycles/stage = 20 cycles)
+    reg [19:0] valid_sr;
     always @(posedge clk) begin
         if (rst) begin
             valid_sr <= 0;
         end else begin
-            valid_sr <= {valid_sr[23:0], start};
+            valid_sr <= {valid_sr[18:0], start};
         end
     end
     
     // Output assignment
-    assign done = valid_sr[24];
+    assign done = valid_sr[19];
     assign read_data_re = st3_re[read_addr];
     assign read_data_im = st3_im[read_addr];
 
