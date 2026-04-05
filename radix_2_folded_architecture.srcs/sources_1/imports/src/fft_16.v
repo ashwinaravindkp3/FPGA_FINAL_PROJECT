@@ -57,6 +57,7 @@ module fft_16 (
         for(i=0; i<8; i=i+1) begin : bf_gen
             butterfly b(
                 .clk(clk),
+                .rst(rst),
                 .a_re(bf_a_re[i]),
                 .a_im(bf_a_im[i]),
                 .b_re(bf_b_re[i]),
