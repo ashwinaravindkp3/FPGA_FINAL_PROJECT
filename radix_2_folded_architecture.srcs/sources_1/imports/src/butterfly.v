@@ -1,0 +1,68 @@
+`timescale 1ns / 1ps
+
+module butterfly (
+    input clk,
+    input signed [15:0] a_re,
+    input signed [15:0] a_im,
+    input signed [15:0] b_re,
+    input signed [15:0] b_im,
+    input signed [15:0] w_re,
+    input signed [15:0] w_im,
+    output reg signed [15:0] y1_re,
+    output reg signed [15:0] y1_im,
+    output reg signed [15:0] y2_re,
+    output reg signed [15:0] y2_im
+);
+
+    // 3 pipeline stages for multipliers and adders
+    
+    reg signed [15:0] a_re_r, a_im_r, b_re_r, b_im_r, w_re_r, w_im_r;
+    always @(posedge clk) begin
+        a_re_r <= a_re; a_im_r <= a_im;
+        b_re_r <= b_re; b_im_r <= b_im;
+        w_re_r <= w_re; w_im_r <= w_im;
+    end
+
+    // Stage 1: Multiplication (DSP M-register)
+    (* use_dsp = "yes" *) reg signed [31:0] p1, p2, p3, p4;
+    always @(posedge clk) begin
+        p1 <= b_re_r * w_re_r;
+        p2 <= b_im_r * w_im_r;
+        p3 <= b_re_r * w_im_r;
+        p4 <= b_im_r * w_re_r;
+    end
+    
+    // Stage 2: Subtraction/Addition (DSP P-register)
+    (* use_dsp = "yes" *) reg signed [31:0] bw_re_full, bw_im_full;
+    always @(posedge clk) begin
+        bw_re_full <= p1 - p2;
+        bw_im_full <= p3 + p4;
+    end
+    
+    // Delay lines for 'a' to match latency of 'bw' (2 cycles difference since inputs were registered)
+    reg signed [15:0] a_re_d1, a_im_d1;
+    reg signed [15:0] a_re_d2, a_im_d2;
+    always @(posedge clk) begin
+        a_re_d1 <= a_re_r; a_im_d1 <= a_im_r;
+        a_re_d2 <= a_re_d1; a_im_d2 <= a_im_d1;
+    end
+    
+    // Twiddles are in Q15 format, so we shift right by 15.
+    wire signed [15:0] bw_re = bw_re_full[30:15];
+    wire signed [15:0] bw_im = bw_im_full[30:15];
+    
+    // Add logic pushed to DSP Slices
+    (* use_dsp = "yes" *) wire signed [15:0] sum_re = a_re_d2 + bw_re;
+    (* use_dsp = "yes" *) wire signed [15:0] sum_im = a_im_d2 + bw_im;
+    (* use_dsp = "yes" *) wire signed [15:0] diff_re = a_re_d2 - bw_re;
+    (* use_dsp = "yes" *) wire signed [15:0] diff_im = a_im_d2 - bw_im;
+
+    // Registers lock the result for maximum pipelining and DSP slice utilization
+    always @(posedge clk) begin
+        y1_re <= sum_re;
+        y1_im <= sum_im;
+        y2_re <= diff_re;
+        y2_im <= diff_im;
+    end
+
+endmodule
