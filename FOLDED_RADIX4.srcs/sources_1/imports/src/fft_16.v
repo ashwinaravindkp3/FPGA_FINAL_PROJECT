@@ -71,6 +71,7 @@ module fft_16_radix4 (
         for(i=0; i<4; i=i+1) begin : bf_gen
             radix4_butterfly b(
                 .clk(clk),
+                .rst(rst),
                 .a_re(bf_a_re[i]), .a_im(bf_a_im[i]),
                 .b_re(bf_b_re[i]), .b_im(bf_b_im[i]),
                 .c_re(bf_c_re[i]), .c_im(bf_c_im[i]),
