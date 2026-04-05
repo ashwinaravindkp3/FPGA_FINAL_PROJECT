@@ -17,6 +17,7 @@ module butterfly (
 
     // 3 pipeline stages for multipliers and adders
     
+    reg signed [15:0] a_re_r, a_im_r, b_re_r, b_im_r, w_re_r, w_im_r;
     always @(posedge clk) begin
         if (rst) begin
             a_re_r <= 0; a_im_r <= 0;
